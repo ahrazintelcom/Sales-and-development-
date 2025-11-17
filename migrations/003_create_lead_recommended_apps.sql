@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS lead_recommended_apps (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lead_id INT NOT NULL,
+    app_type VARCHAR(120) NOT NULL,
+    app_name VARCHAR(180) NOT NULL,
+    description TEXT,
+    key_features JSON NULL,
+    benefits JSON NULL,
+    price_min DECIMAL(10,2) DEFAULT 0,
+    price_max DECIMAL(10,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
