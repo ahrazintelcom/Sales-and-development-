@@ -1,6 +1,37 @@
 <?php
 session_start();
 
+// Lightweight .env loader so config files can rely on environment variables
+(function () {
+    $envFile = __DIR__ . '/../.env';
+    if (!file_exists($envFile)) {
+        return;
+    }
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+            continue;
+        }
+        [$name, $value] = explode('=', $line, 2);
+        $name = trim($name);
+        $value = trim($value);
+        if ($value === '') {
+            $value = '';
+        } else {
+            if (($value[0] ?? '') === "'" && str_ends_with($value, "'")) {
+                $value = substr($value, 1, -1);
+            } elseif (($value[0] ?? '') === '"' && str_ends_with($value, '"')) {
+                $value = substr($value, 1, -1);
+            }
+            $value = rtrim($value, "\r");
+        }
+        putenv("{$name}={$value}");
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
+    }
+})();
+
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
 $baseUrl = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
 if ($baseUrl === '' || $baseUrl === '.') {
