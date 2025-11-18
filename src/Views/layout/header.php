@@ -24,6 +24,10 @@
                 <li class="nav-item"><a class="nav-link <?= ($_GET['route'] ?? '') === 'settings' ? 'active' : '' ?>" href="<?= BASE_URL ?>/?route=settings">Settings</a></li>
             </ul>
             <div class="d-flex align-items-center gap-3 text-white">
+                <button type="button" class="btn btn-link p-0 border-0 text-white api-status-button" id="apiStatusButton" title="Check AI API connection">
+                    <span class="visually-hidden" id="apiStatusMessage">API status unknown</span>
+                    <span class="api-status-indicator" id="apiStatusIndicator" role="status" aria-live="polite"></span>
+                </button>
                 <span><?= htmlspecialchars($authUser['name'] ?? '') ?> (<?= $authUser['role'] ?>)</span>
                 <a class="btn btn-outline-light btn-sm" href="<?= BASE_URL ?>/?route=logout">Logout</a>
             </div>

@@ -57,6 +57,7 @@ use App\Controllers\AuthController;
 use App\Controllers\LeadController;
 use App\Controllers\ProjectController;
 use App\Controllers\SettingsController;
+use App\Controllers\StatusController;
 use App\Core\Auth;
 
 $route = $_GET['route'] ?? null;
@@ -134,6 +135,9 @@ switch ($route) {
         break;
     case 'settings/multiplier':
         (new SettingsController())->saveMultiplier();
+        break;
+    case 'status/api':
+        (new StatusController())->apiStatus();
         break;
     default:
         http_response_code(404);

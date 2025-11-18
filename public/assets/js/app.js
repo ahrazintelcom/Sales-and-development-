@@ -24,7 +24,53 @@ document.addEventListener('DOMContentLoaded', () => {
             if (loadingLabel) loadingLabel.classList.remove('d-none');
         });
     });
+
+    initApiStatusChecker();
 });
+
+function initApiStatusChecker() {
+    const button = document.getElementById('apiStatusButton');
+    const indicator = document.getElementById('apiStatusIndicator');
+    const statusMessage = document.getElementById('apiStatusMessage');
+    if (!button || !indicator) return;
+
+    const setStatus = (state, message) => {
+        indicator.classList.remove('status-ok', 'status-error', 'status-checking');
+        if (state === 'ok') {
+            indicator.classList.add('status-ok');
+        } else if (state === 'error') {
+            indicator.classList.add('status-error');
+        } else if (state === 'checking') {
+            indicator.classList.add('status-checking');
+        }
+        if (statusMessage) {
+            statusMessage.textContent = message;
+        }
+        button.setAttribute('aria-label', message);
+    };
+
+    button.addEventListener('click', () => {
+        setStatus('checking', 'Checking API connection...');
+        fetch(withBase('/?route=status/api'))
+            .then(res => res.json().catch(() => ({})).then(body => {
+                if (!res.ok) {
+                    throw new Error(body.message || 'Unable to check API status.');
+                }
+                return body;
+            }))
+            .then(body => {
+                const state = body.connected ? 'ok' : 'error';
+                const message = body.message || (body.connected ? 'API connection is healthy.' : 'API connection failed.');
+                setStatus(state, message);
+                showToast(message, body.connected ? 'success' : 'danger');
+            })
+            .catch(err => {
+                const message = err.message || 'Unable to check API status.';
+                setStatus('error', message);
+                showToast(message, 'danger');
+            });
+    });
+}
 
 function showToast(message, type = 'danger') {
     if (!message) return;

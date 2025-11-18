@@ -14,3 +14,32 @@ body {
 .spinner-border.spinner-border-sm {
     vertical-align: middle;
 }
+
+.api-status-button {
+    line-height: 1;
+}
+
+.api-status-indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.7);
+    display: inline-block;
+    background-color: transparent;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.api-status-indicator.status-ok {
+    background-color: #1ab759;
+    box-shadow: 0 0 6px rgba(26, 183, 89, 0.6);
+}
+
+.api-status-indicator.status-error {
+    background-color: #dc3545;
+    box-shadow: 0 0 6px rgba(220, 53, 69, 0.6);
+}
+
+.api-status-indicator.status-checking {
+    background-color: #ffc107;
+    box-shadow: 0 0 6px rgba(255, 193, 7, 0.6);
+}

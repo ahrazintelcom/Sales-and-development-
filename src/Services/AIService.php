@@ -187,6 +187,52 @@ class AIService
         return ['success' => true, 'data' => trim($content), 'error' => null];
     }
 
+    public function checkConnection(): array
+    {
+        if (empty($this->apiKey)) {
+            return [
+                'connected' => false,
+                'message' => 'AI API key is missing. Please update your settings.',
+            ];
+        }
+
+        $endpoint = rtrim($this->baseUrl, '/') . '/models';
+        $ch = curl_init($endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $this->apiKey,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_TIMEOUT => 10,
+        ]);
+
+        $response = curl_exec($ch);
+        if ($response === false) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            return [
+                'connected' => false,
+                'message' => 'Unable to reach the AI service: ' . $error,
+            ];
+        }
+
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($status >= 400) {
+            return [
+                'connected' => false,
+                'message' => 'AI service returned HTTP ' . $status . '. Check your credentials or base URL.',
+            ];
+        }
+
+        return [
+            'connected' => true,
+            'message' => 'AI API connection successful.',
+        ];
+    }
+
     private function parseScriptResponse(array $response): array
     {
         $talkingPoints = $response['talking_points'] ?? [];
