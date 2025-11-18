@@ -26,6 +26,19 @@ class Lead extends Model
             $query .= ' AND city LIKE :city';
             $params['city'] = '%' . $filters['city'] . '%';
         }
+        if (!empty($filters['search'])) {
+            $query .= ' AND (
+                company_name LIKE :search
+                OR website LIKE :search
+                OR industry LIKE :search
+                OR city LIKE :search
+                OR state_province LIKE :search
+                OR contact_name LIKE :search
+                OR contact_email LIKE :search
+                OR description LIKE :search
+            )';
+            $params['search'] = '%' . $filters['search'] . '%';
+        }
         $query .= ' ORDER BY created_at DESC';
         $stmt = $this->db->prepare($query);
         $stmt->execute($params);

@@ -55,10 +55,23 @@
                         <label class="form-label">City / State</label>
                         <input type="text" class="form-control" name="city" value="<?= htmlspecialchars($filters['city'] ?? '') ?>">
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Keyword Search</label>
+                        <input type="text" class="form-control" name="search" placeholder="Company, contact, industry..." value="<?= htmlspecialchars($filters['search'] ?? '') ?>">
+                    </div>
                     <div class="col-md-2 d-flex align-items-end">
                         <button class="btn btn-primary w-100"><i class="bi bi-search"></i> Search Leads</button>
                     </div>
                 </form>
+                <?php if (!empty($searchInsight)): ?>
+                    <div class="alert alert-info d-flex align-items-start gap-2 mt-3">
+                        <i class="bi bi-magic text-primary fs-4"></i>
+                        <div>
+                            <div class="fw-semibold">AI Discovery Insight</div>
+                            <div class="small mb-0"><?= nl2br(htmlspecialchars($searchInsight)) ?></div>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>

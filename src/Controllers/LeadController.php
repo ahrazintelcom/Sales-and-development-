@@ -38,9 +38,11 @@ class LeadController extends Controller
             'industry' => $_GET['industry'] ?? '',
             'company_size' => $_GET['company_size'] ?? '',
             'city' => $_GET['city'] ?? '',
+            'search' => trim($_GET['search'] ?? ''),
         ];
         $leads = $this->leadModel->all($filters);
-        $this->view('leads/index', compact('leads', 'filters'));
+        $searchInsight = $this->aiService->generateLeadSearchNarrative($filters, count($leads));
+        $this->view('leads/index', compact('leads', 'filters', 'searchInsight'));
     }
 
     public function importCsv(): void
