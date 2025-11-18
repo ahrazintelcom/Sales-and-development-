@@ -59,6 +59,21 @@ Return JSON with app_name, description, key_features (array), benefits (array)."
         ];
     }
 
+    public function generateLeadSearchNarrative(array $filters, int $resultsCount): string
+    {
+        $activeFilters = array_filter($filters, function ($value) {
+            return $value !== null && $value !== '';
+        });
+        $phrases = [];
+        foreach ($activeFilters as $key => $value) {
+            $label = ucwords(str_replace('_', ' ', $key));
+            $phrases[] = "$label: $value";
+        }
+        $filterSummary = $phrases ? implode(', ', $phrases) : 'no filters';
+        $prompt = "We searched our lead database using {$filterSummary} and found {$resultsCount} matches. Provide a concise strategic insight (1-2 sentences) on how the sales team should follow up.";
+        return $this->callAI('Lead discovery insight', $prompt);
+    }
+
     private function callAI(string $purpose, string $prompt): string
     {
         if (empty($this->apiKey)) {
