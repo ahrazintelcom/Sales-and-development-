@@ -24,16 +24,18 @@ use App\Core\Auth;
 $route = $_GET['route'] ?? 'leads';
 $method = $_SERVER['REQUEST_METHOD'];
 
-if (!Auth::check() && !in_array($route, ['login', 'login_post'])) {
+if (!Auth::check() && $route !== 'login') {
     $route = 'login';
 }
 
 switch ($route) {
     case 'login':
-        (new AuthController())->showLogin();
-        break;
-    case 'login_post':
-        (new AuthController())->login();
+        $authController = new AuthController();
+        if ($method === 'POST') {
+            $authController->login();
+        } else {
+            $authController->showLogin();
+        }
         break;
     case 'logout':
         (new AuthController())->logout();
