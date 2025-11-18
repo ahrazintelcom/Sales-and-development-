@@ -14,28 +14,76 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+function showToast(message, type = 'danger') {
+    if (!message) return;
+    let container = document.getElementById('appToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'appToastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        document.body.appendChild(container);
+    }
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast align-items-center text-bg-${type} border-0`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>`;
+    container.appendChild(toastEl);
+    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+    toast.show();
+    toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+}
+
+function parseJsonResponse(response, fallbackMessage) {
+    return response.json().catch(() => ({})).then(body => {
+        if (!response.ok) {
+            const proposalError = body.proposal && body.proposal.error;
+            const error = body.error || proposalError || fallbackMessage;
+            throw new Error(error || fallbackMessage);
+        }
+        return body;
+    });
+}
+
 function handleRegenerate(button) {
     const leadId = button.dataset.leadId;
     button.disabled = true;
     const spinner = button.querySelector('.spinner-border');
     if (spinner) spinner.classList.remove('d-none');
+    document.querySelector('#callScript').textContent = 'Refreshing call script with the latest AI context...';
+    document.querySelector('#emailScript').textContent = 'Refreshing email template with the latest AI context...';
+    const talkingList = document.querySelector('#talkingPoints');
+    if (talkingList) {
+        talkingList.innerHTML = '<li>Updating talking points...</li>';
+    }
     fetch(withBase('/?route=leads/regenerate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'id=' + leadId
     })
-        .then(res => res.json())
+        .then(res => parseJsonResponse(res, 'Unable to regenerate scripts.'))
         .then(data => {
-            document.querySelector('#leadSummary').textContent = data.summary.summary || data.summary;
-            document.querySelector('#callScript').textContent = data.scripts.call_script;
-            document.querySelector('#emailScript').textContent = data.scripts.email_template;
+            const summary = data.summary || {};
+            const summaryText = typeof summary === 'string' ? summary : summary.summary || 'Summary unavailable.';
+            const scripts = data.scripts || {};
+            document.querySelector('#leadSummary').textContent = summaryText;
+            document.querySelector('#callScript').textContent = scripts.call_script || 'Call script unavailable.';
+            document.querySelector('#emailScript').textContent = scripts.email_template || 'Email template unavailable.';
             const list = document.querySelector('#talkingPoints');
             list.innerHTML = '';
-            data.scripts.talking_points.forEach(point => {
+            (scripts.talking_points || []).forEach(point => {
                 const li = document.createElement('li');
                 li.textContent = point;
                 list.appendChild(li);
             });
+            if (scripts.error) {
+                showToast(scripts.error, 'warning');
+            }
             if (data.apps) {
                 const container = document.querySelector('#recommendedApps');
                 if (container) {
@@ -84,7 +132,15 @@ function handleRegenerate(button) {
                 }
             }
         })
-        .catch(() => alert('Failed to regenerate.'))
+        .catch(err => {
+            showToast(err.message || 'Failed to regenerate.', 'danger');
+            document.querySelector('#callScript').textContent = 'Unable to refresh call script.';
+            document.querySelector('#emailScript').textContent = 'Unable to refresh email template.';
+            const list = document.querySelector('#talkingPoints');
+            if (list) {
+                list.innerHTML = '<li>Unable to refresh talking points.</li>';
+            }
+        })
         .finally(() => {
             button.disabled = false;
             if (spinner) spinner.classList.add('d-none');
@@ -103,16 +159,45 @@ function handleProposal(button) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'id=' + leadId
     })
-        .then(res => res.json())
+        .then(res => parseJsonResponse(res, 'Unable to generate proposal.'))
         .then(data => {
-            const content = data.proposal.content || data.proposal;
-            modalBody.innerHTML = '<pre class="bg-light p-3 rounded">' + content + '</pre>' +
-                '<button class="btn btn-outline-secondary" id="copyProposal">Copy to Clipboard</button>';
+            const proposal = data.proposal || {};
+            if (proposal.error) {
+                showToast(proposal.error, 'warning');
+            }
+            const sections = [
+                { label: 'Executive Summary', value: proposal.executive_summary },
+                { label: 'Solution Overview', value: proposal.solution_overview },
+                { label: 'Pricing Context', value: proposal.pricing_context },
+                { label: 'ROI Projection', value: proposal.roi_projection },
+                { label: 'Next Steps', value: proposal.next_steps },
+            ];
+            let html = '';
+            sections.forEach(section => {
+                if (!section.value) return;
+                html += `<section class="mb-3"><h6>${section.label}</h6><p>${section.value}</p></section>`;
+            });
+            if (proposal.proposal_body) {
+                html += `<section class="mb-3"><h6>Full Proposal</h6><pre class="bg-light p-3 rounded">${proposal.proposal_body}</pre></section>`;
+            }
+            if (!html) {
+                html = '<div class="alert alert-info">Proposal content is not available.</div>';
+            }
+            html += '<button class="btn btn-outline-secondary" id="copyProposal">Copy to Clipboard</button>';
+            modalBody.innerHTML = html;
             document.getElementById('copyProposal').addEventListener('click', () => {
-                navigator.clipboard.writeText(content);
+                navigator.clipboard.writeText([
+                    proposal.executive_summary,
+                    proposal.solution_overview,
+                    proposal.pricing_context,
+                    proposal.roi_projection,
+                    proposal.next_steps,
+                    proposal.proposal_body
+                ].filter(Boolean).join('\n\n'));
             });
         })
-        .catch(() => {
+        .catch(err => {
+            showToast(err.message || 'Failed to generate proposal.', 'danger');
             modalBody.innerHTML = '<div class="alert alert-danger">Failed to generate proposal.</div>';
         })
         .finally(() => button.disabled = false);

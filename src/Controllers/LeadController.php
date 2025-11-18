@@ -150,8 +150,37 @@ class LeadController extends Controller
             $app['benefits'] = json_decode($app['benefits'], true) ?: [];
             return $app;
         }, $this->appModel->getByLead($lead['id']));
-        $proposal = $this->aiService->generateProposal($lead, $apps, []);
-        $this->json(['proposal' => $proposal]);
+        $pricing = $this->buildPricingSummary($apps);
+        $proposal = $this->aiService->generateProposal($lead, $apps, $pricing);
+        $status = !empty($proposal['error']) ? 502 : 200;
+        $this->json(['proposal' => $proposal], $status);
+    }
+
+    private function buildPricingSummary(array $apps): array
+    {
+        if (empty($apps)) {
+            return [];
+        }
+        $count = 0;
+        $minTotal = 0;
+        $maxTotal = 0;
+        foreach ($apps as $app) {
+            if (!isset($app['price_min'], $app['price_max'])) {
+                continue;
+            }
+            $minTotal += (float)$app['price_min'];
+            $maxTotal += (float)$app['price_max'];
+            $count++;
+        }
+        if ($count === 0) {
+            return [];
+        }
+        return [
+            'average' => [
+                'min' => $minTotal / $count,
+                'max' => $maxTotal / $count,
+            ],
+        ];
     }
 
     private function json(array $data, int $status = 200): void
