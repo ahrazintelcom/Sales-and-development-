@@ -1,8 +1,24 @@
+<?php
+
+namespace App\Controllers;
+
+use App\Core\Auth;
+use App\Core\Controller;
+use App\Models\Lead;
+use App\Models\LeadRecommendedApp;
+use App\Models\Project;
 use App\Services\AIService;
 use App\Services\LeadFinderService;
 use App\Services\PricingService;
+use App\Services\RecommendationService;
+
+class LeadController extends Controller
+{
+    private Lead $leadModel;
+    private LeadRecommendedApp $appModel;
     private Project $projectModel;
     private LeadFinderService $leadFinderService;
+    private RecommendationService $recommendationService;
     private AIService $aiService;
     private PricingService $pricingService;
 
@@ -12,39 +28,85 @@ use App\Services\PricingService;
         $this->appModel = new LeadRecommendedApp();
         $this->projectModel = new Project();
         $this->leadFinderService = new LeadFinderService();
+        $this->recommendationService = new RecommendationService();
         $this->aiService = new AIService();
         $this->pricingService = new PricingService();
     }
+
     public function index(): void
     {
         Auth::requireRole(['admin', 'sales']);
+
         $filters = [
-            'country' => $_GET['country'] ?? '',
+            'country' => trim((string)($_GET['country'] ?? '')),
+            'industry' => trim((string)($_GET['industry'] ?? '')),
+            'company_size' => trim((string)($_GET['company_size'] ?? '')),
+            'city' => trim((string)($_GET['city'] ?? '')),
+        ];
+
+        $leads = $this->leadModel->all($filters);
+        $discoveryError = null;
+        $searchExecuted = false;
+        $aiLeadCount = 0;
+
+        if ($this->shouldRunDiscovery($filters)) {
+            $searchExecuted = true;
+            $discoveredLeads = $this->leadFinderService->discoverLeads($filters);
+            $discoveryError = $this->leadFinderService->getLastError();
+            if ($discoveryError === null && !empty($discoveredLeads)) {
+                $aiLeadCount = count($discoveredLeads);
+                $leads = array_merge($discoveredLeads, $leads);
+            }
+        }
+
         $this->view('leads/index', compact('leads', 'filters', 'discoveryError', 'searchExecuted', 'aiLeadCount'));
     }
 
     public function discover(): void
     {
-        // Reuse the index pipeline so we don't duplicate Google Places logic.
         $this->index();
     }
+
     public function show(): void
     {
         Auth::requireRole(['admin', 'sales']);
+
         $id = (int)($_GET['id'] ?? 0);
         $lead = $this->leadModel->find($id);
         if (!$lead) {
             $this->redirect('/?route=leads');
         }
+
         $aiData = $this->transformLeadAiData($lead);
         $needsRefresh = $this->needsAiRefresh($aiData['last_generated_at']);
         $project = $this->projectModel->findByLead($lead['id']);
-        $this->view('leads/show', compact('lead', 'aiData', 'needsRefresh', 'project'));
+        $salesScripts = [
+            'call_script' => $aiData['call_script'],
+            'email_template' => trim($aiData['email_subject'] . "\n\n" . $aiData['email_body']),
+            'talking_points' => $aiData['talking_points'],
+        ];
+
+        $this->view('leads/show', compact('lead', 'aiData', 'needsRefresh', 'project', 'salesScripts'));
     }
+
     public function markStatus(): void
     {
         Auth::requireRole(['admin', 'sales']);
+
         $id = (int)($_POST['id'] ?? 0);
+        $status = (string)($_POST['status'] ?? 'new');
+        $allowed = ['new', 'contacted', 'follow_up', 'locked_in', 'lost'];
+        if (!in_array($status, $allowed, true)) {
+            $status = 'new';
+        }
+
+        $lead = $this->leadModel->find($id);
+        if (!$lead) {
+            $this->redirect('/?route=leads');
+        }
+
+        $this->leadModel->updateStatus($id, $status);
+
         if ($status === 'locked_in') {
             $existingProject = $this->projectModel->findByLead($lead['id']);
             if (!$existingProject) {
@@ -55,6 +117,7 @@ use App\Services\PricingService;
                     $appLabel = $recommendedApp['app_name'] ?? null;
                     $appType = $recommendedApp['app_type'] ?? $appType;
                 }
+
                 $projectName = $lead['company_name'] . ' – ' . ($appLabel ?: 'Custom Web App');
                 $projectId = $this->projectModel->create([
                     'lead_id' => $lead['id'],
@@ -63,6 +126,7 @@ use App\Services\PricingService;
                     'status' => 'backlog',
                     'spec_summary' => 'Initial spec pending AI generation.',
                 ]);
+
                 $appsForSpec = $this->appModel->getByLead($lead['id']);
                 if (empty($appsForSpec) && $lead['ai_app_type']) {
                     $appsForSpec = [[
@@ -74,12 +138,9 @@ use App\Services\PricingService;
                         'price_max' => $lead['ai_price_max'],
                     ]];
                 } else {
-                    $appsForSpec = array_map(function ($stored) {
-                        $stored['key_features'] = json_decode($stored['key_features'], true) ?: [];
-                        $stored['benefits'] = json_decode($stored['benefits'], true) ?: [];
-                        return $stored;
-                    }, $appsForSpec);
+                    $appsForSpec = $this->normaliseStoredApps($appsForSpec);
                 }
+
                 $spec = $this->aiService->generateProjectSpec($this->projectModel->find($projectId), $lead, $appsForSpec);
                 $this->projectModel->updateSpec($projectId, [
                     'spec_summary' => $spec['spec_summary'] ?? '',
@@ -87,34 +148,40 @@ use App\Services\PricingService;
                 ]);
             }
         }
+
         $this->redirect('/?route=leads');
     }
 
     public function generateAi(): void
     {
         Auth::requireRole(['admin', 'sales']);
+
         $id = (int)($_POST['id'] ?? 0);
         $lead = $this->leadModel->find($id);
         if (!$lead) {
             $this->json(['error' => 'Lead not found.'], 404);
             return;
         }
+
         $analysis = $this->aiService->analyseLeadAndSuggestApp($lead);
         if (!empty($analysis['error'])) {
             $this->json(['error' => $analysis['error']], 502);
             return;
         }
+
         $pricing = $this->pricingService->estimateRange($analysis['app_type'] ?? 'Custom Web App', $lead['company_size'] ?? null);
         $scripts = $this->aiService->generateSalesScripts($lead, $analysis, $pricing);
         if (!empty($scripts['error'])) {
             $this->json(['error' => $scripts['error']], 502);
             return;
         }
+
         $proposal = $this->aiService->generateFullProposal($lead, $analysis, $pricing);
         if (!empty($proposal['error'])) {
             $this->json(['error' => $proposal['error']], 502);
             return;
         }
+
         $timestamp = date('Y-m-d H:i:s');
         $this->leadModel->updateAiData($lead['id'], [
             'ai_app_type' => $analysis['app_type'] ?? null,
@@ -142,33 +209,124 @@ use App\Services\PricingService;
             'pricing' => $pricing,
         ]);
     }
+
     public function regenerateScripts(): void
     {
         Auth::requireRole(['admin', 'sales']);
+
         $id = (int)($_POST['id'] ?? 0);
         $lead = $this->leadModel->find($id);
         if (!$lead) {
             $this->json(['error' => 'Lead not found'], 404);
             return;
         }
+
         $analysis = $this->aiService->analyseLeadAndSuggestApp($lead);
         if (!empty($analysis['error'])) {
             $this->json(['error' => $analysis['error']], 502);
             return;
         }
+
         $pricing = $this->pricingService->estimateRange($analysis['app_type'] ?? 'Custom Web App', $lead['company_size'] ?? null);
         $scripts = $this->aiService->generateSalesScripts($lead, $analysis, $pricing);
         if (!empty($scripts['error'])) {
             $this->json(['error' => $scripts['error']], 502);
             return;
         }
-        $summary = ['summary' => $analysis['insight_summary'] ?? $analysis['app_concept'] ?? ''];
+
+        $summary = ['summary' => $analysis['insight_summary'] ?? ($analysis['app_concept'] ?? '')];
         $this->json([
             'summary' => $summary,
             'scripts' => $scripts,
             'apps' => [$analysis],
         ]);
     }
+
+    public function generateProposal(): void
+    {
+        Auth::requireRole(['admin', 'sales']);
+
+        $id = (int)($_POST['id'] ?? 0);
+        $lead = $this->leadModel->find($id);
+        if (!$lead) {
+            $this->json(['error' => 'Lead not found'], 404);
+            return;
+        }
+
+        $apps = $this->normaliseStoredApps($this->appModel->getByLead($lead['id']));
+        if (empty($apps) && !empty($lead['ai_app_type'])) {
+            $apps = [[
+                'app_name' => $lead['ai_app_type'],
+                'app_type' => $lead['ai_app_type'],
+                'key_features' => $this->decodeStoredList($lead['ai_app_features'] ?? null),
+                'benefits' => $this->decodeStoredList($lead['ai_app_benefits'] ?? null),
+                'price_min' => $lead['ai_price_min'],
+                'price_max' => $lead['ai_price_max'],
+            ]];
+        }
+        if (empty($apps)) {
+            $apps = $this->recommendationService->generateForLead($lead, true);
+        }
+
+        $pricing = $this->buildPricingSummary($apps);
+        $proposal = $this->aiService->generateProposal($lead, $apps, $pricing);
+        $status = !empty($proposal['error']) ? 502 : 200;
+        $this->json(['proposal' => $proposal], $status);
+    }
+
+    public function importCsv(): void
+    {
+        Auth::requireRole(['admin', 'sales']);
+
+        if (!isset($_FILES['csv']) || $_FILES['csv']['error'] !== UPLOAD_ERR_OK) {
+            $_SESSION['flash_error'] = 'Failed to upload CSV file.';
+            $this->redirect('/?route=leads');
+        }
+
+        $count = $this->leadFinderService->importCsv($_FILES['csv']['tmp_name']);
+        $_SESSION['flash_success'] = "Imported {$count} leads.";
+        $this->redirect('/?route=leads');
+    }
+
+    private function buildPricingSummary(array $apps): array
+    {
+        if (empty($apps)) {
+            return [];
+        }
+
+        $count = 0;
+        $minTotal = 0;
+        $maxTotal = 0;
+        foreach ($apps as $app) {
+            if (!isset($app['price_min'], $app['price_max'])) {
+                continue;
+            }
+            $minTotal += (float)$app['price_min'];
+            $maxTotal += (float)$app['price_max'];
+            $count++;
+        }
+
+        if ($count === 0) {
+            return [];
+        }
+
+        return [
+            'average' => [
+                'min' => $minTotal / $count,
+                'max' => $maxTotal / $count,
+            ],
+        ];
+    }
+
+    private function normaliseStoredApps(array $storedApps): array
+    {
+        return array_map(function (array $stored): array {
+            $stored['key_features'] = json_decode($stored['key_features'] ?? '[]', true) ?: [];
+            $stored['benefits'] = json_decode($stored['benefits'] ?? '[]', true) ?: [];
+            return $stored;
+        }, $storedApps);
+    }
+
     private function json(array $data, int $status = 200): void
     {
         http_response_code($status);
@@ -178,6 +336,11 @@ use App\Services\PricingService;
 
     private function shouldRunDiscovery(array $filters): bool
     {
+        foreach (['industry', 'city', 'country'] as $key) {
+            $value = $filters[$key] ?? '';
+            if (is_string($value) && trim($value) !== '') {
+                return true;
+            }
         }
         return false;
     }
@@ -198,6 +361,7 @@ use App\Services\PricingService;
                 $emailBody = trim($parts[1] ?? $rawEmail);
             }
         }
+
         return [
             'app_type' => $lead['ai_app_type'] ?? '',
             'insight_summary' => $lead['ai_insight_summary'] ?? '',
@@ -233,7 +397,7 @@ use App\Services\PricingService;
             return [];
         }
         $value = array_map('trim', $value);
-        $value = array_filter($value, fn ($item) => $item !== '');
+        $value = array_filter($value, fn($item) => $item !== '');
         return array_values($value);
     }
 
@@ -248,314 +412,4 @@ use App\Services\PricingService;
         }
         return (time() - $last) > 86400;
     }
-        Auth::requireRole(['admin', 'sales']);
-
-        if (!isset($_FILES['csv']) || $_FILES['csv']['error'] !== UPLOAD_ERR_OK) {
-
-            $_SESSION['flash_error'] = 'Failed to upload CSV file.';
-
-            $this->redirect('/?route=leads');
-
-        }
-
-        $count = $this->leadFinderService->importCsv($_FILES['csv']['tmp_name']);
-
-        $_SESSION['flash_success'] = "Imported {$count} leads.";
-
-        $this->redirect('/?route=leads');
-
-    }
-
-
-
-    public function show(): void
-
-    {
-
-        Auth::requireRole(['admin', 'sales']);
-
-        $id = (int)($_GET['id'] ?? 0);
-
-        $lead = $this->leadModel->find($id);
-
-        if (!$lead) {
-
-            $this->redirect('/?route=leads');
-
-        }
-
-        $recommendedApps = $this->appModel->getByLead($lead['id']);
-
-        if (empty($recommendedApps)) {
-
-            $recommendedApps = $this->recommendationService->generateForLead($lead);
-
-        } else {
-
-            $recommendedApps = array_map(function ($app) {
-
-                $app['key_features'] = json_decode($app['key_features'], true) ?: [];
-
-                $app['benefits'] = json_decode($app['benefits'], true) ?: [];
-
-                return $app;
-
-            }, $recommendedApps);
-
-        }
-
-        $leadSummary = $this->aiService->generateLeadSummary($lead);
-
-        $salesScripts = $this->aiService->generateSalesScripts($lead, $recommendedApps);
-
-        $proposalPreview = null;
-
-        $this->view('leads/show', compact('lead', 'recommendedApps', 'leadSummary', 'salesScripts', 'proposalPreview'));
-
-    }
-
-
-
-    public function markStatus(): void
-
-    {
-
-        Auth::requireRole(['admin', 'sales']);
-
-        $id = (int)($_POST['id'] ?? 0);
-
-        $status = $_POST['status'] ?? 'new';
-
-        $allowed = ['new','contacted','follow_up','locked_in','lost'];
-
-        if (!in_array($status, $allowed, true)) {
-
-            $status = 'new';
-
-        }
-
-        $lead = $this->leadModel->find($id);
-
-        if (!$lead) {
-
-            $this->redirect('/?route=leads');
-
-        }
-
-        $this->leadModel->updateStatus($id, $status);
-
-        if ($status === 'locked_in') {
-
-            $app = $this->appModel->getByLead($id)[0] ?? null;
-
-            $projectName = $lead['company_name'] . ' – ' . ($app['app_name'] ?? 'Custom Web App');
-
-            $projectId = $this->projectModel->create([
-
-                'lead_id' => $lead['id'],
-
-                'project_name' => $projectName,
-
-                'app_type' => $app['app_type'] ?? 'custom',
-
-                'status' => 'backlog',
-
-                'spec_summary' => 'Initial spec pending AI generation.',
-
-            ]);
-
-            $appsForSpec = array_map(function ($stored) {
-
-                $stored['key_features'] = json_decode($stored['key_features'], true) ?: [];
-
-                $stored['benefits'] = json_decode($stored['benefits'], true) ?: [];
-
-                return $stored;
-
-            }, $this->appModel->getByLead($lead['id']));
-
-            $spec = $this->aiService->generateProjectSpec($this->projectModel->find($projectId), $lead, $appsForSpec);
-
-            $this->projectModel->updateSpec($projectId, [
-
-                'spec_summary' => $spec['spec_summary'] ?? '',
-
-                'tech_notes' => $spec['tech_notes'] ?? '',
-
-            ]);
-
-        }
-
-        $this->redirect('/?route=leads');
-
-    }
-
-
-
-    public function regenerateScripts(): void
-
-    {
-
-        Auth::requireRole(['admin', 'sales']);
-
-        $id = (int)($_POST['id'] ?? 0);
-
-        $lead = $this->leadModel->find($id);
-
-        if (!$lead) {
-
-            $this->json(['error' => 'Lead not found'], 404);
-
-            return;
-
-        }
-
-        $apps = $this->recommendationService->generateForLead($lead, true);
-
-        $scripts = $this->aiService->generateSalesScripts($lead, $apps);
-
-        $summary = $this->aiService->generateLeadSummary($lead);
-
-        $this->json([
-
-            'summary' => $summary,
-
-            'scripts' => $scripts,
-
-            'apps' => $apps,
-
-        ]);
-
-    }
-
-
-
-    public function generateProposal(): void
-
-    {
-
-        Auth::requireRole(['admin', 'sales']);
-
-        $id = (int)($_POST['id'] ?? 0);
-
-        $lead = $this->leadModel->find($id);
-
-        if (!$lead) {
-
-            $this->json(['error' => 'Lead not found'], 404);
-
-            return;
-
-        }
-
-        $apps = array_map(function ($app) {
-
-            $app['key_features'] = json_decode($app['key_features'], true) ?: [];
-
-            $app['benefits'] = json_decode($app['benefits'], true) ?: [];
-
-            return $app;
-
-        }, $this->appModel->getByLead($lead['id']));
-
-        $pricing = $this->buildPricingSummary($apps);
-
-        $proposal = $this->aiService->generateProposal($lead, $apps, $pricing);
-
-        $status = !empty($proposal['error']) ? 502 : 200;
-
-        $this->json(['proposal' => $proposal], $status);
-
-    }
-
-
-
-    private function buildPricingSummary(array $apps): array
-
-    {
-
-        if (empty($apps)) {
-
-            return [];
-
-        }
-
-        $count = 0;
-
-        $minTotal = 0;
-
-        $maxTotal = 0;
-
-        foreach ($apps as $app) {
-
-            if (!isset($app['price_min'], $app['price_max'])) {
-
-                continue;
-
-            }
-
-            $minTotal += (float)$app['price_min'];
-
-            $maxTotal += (float)$app['price_max'];
-
-            $count++;
-
-        }
-
-        if ($count === 0) {
-
-            return [];
-
-        }
-
-        return [
-
-            'average' => [
-
-                'min' => $minTotal / $count,
-
-                'max' => $maxTotal / $count,
-
-            ],
-
-        ];
-
-    }
-
-
-
-    private function json(array $data, int $status = 200): void
-
-    {
-
-        http_response_code($status);
-
-        header('Content-Type: application/json');
-
-        echo json_encode($data);
-
-    }
-
-
-
-    private function shouldRunDiscovery(array $filters): bool
-
-    {
-
-        foreach (['industry', 'city', 'country'] as $key) {
-
-            $value = $filters[$key] ?? '';
-
-            if (is_string($value) && trim($value) !== '') {
-
-                return true;
-
-            }
-
-        }
-
-        return false;
-
-    }
-
 }
