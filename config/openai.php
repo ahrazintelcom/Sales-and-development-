@@ -1,6 +1,6 @@
 <?php
 return [
-    'api_key' => getenv('OPENAI_API_KEY') ?: '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',
-    'model' => getenv('OPENAI_MODEL') ?: 'gpt-5',
+    'api_key' => getenv('OPENAI_API_KEY') ?: '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',
+    'model' => getenv('OPENAI_MODEL') ?: 'gpt-4o-mini',
     'base_url' => getenv('OPENAI_BASE_URL') ?: 'https://openrouter.ai/api/v1',
 ];
