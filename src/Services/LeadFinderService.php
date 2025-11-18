@@ -7,6 +7,7 @@ use App\Models\Lead;
 class LeadFinderService
 {
     private Lead $leadModel;
+    private ?string $lastError = null;
 
     public function __construct()
     {
@@ -23,8 +24,8 @@ class LeadFinderService
         $count = 0;
         while (($row = fgetcsv($handle)) !== false) {
             $data = array_combine($header, $row);
-            $leadData = $this->normalizeLeadData([
-                'company_name' => $data['name'] ?? $data['company_name'] ?? 'Unknown Company',
+            $leadData = [
+                'company_name' => $data['name'] ?? 'Unknown Company',
                 'website' => $data['website'] ?? '',
                 'industry' => $data['industry'] ?? 'General',
                 'country' => $data['country'] ?? '',
@@ -33,12 +34,8 @@ class LeadFinderService
                 'company_size' => $data['company_size'] ?? '1-10',
                 'contact_name' => $data['contact_name'] ?? '',
                 'contact_email' => $data['contact_email'] ?? '',
-                'description' => $data['description'] ?? null,
-            ]);
-            $leadData['lead_score'] = $this->scoreLead($leadData);
-            if ($this->leadModel->existsByCompanyOrWebsite($leadData['company_name'], $leadData['website'])) {
-                continue;
-            }
+                'lead_score' => $this->scoreLead($data),
+            ];
             $this->leadModel->create($leadData);
             $count++;
         }
@@ -46,48 +43,87 @@ class LeadFinderService
         return $count;
     }
 
-    public function discoverLeads(array $filters = []): array
+    public function getLastError(): ?string
     {
-        $normalizedFilters = $this->normalizeFilters($filters);
-        $sample = $this->seedDataset();
-        $results = array_filter($sample, function ($lead) use ($normalizedFilters) {
-            if ($normalizedFilters['country'] && strcasecmp($lead['country'], $normalizedFilters['country']) !== 0) {
-                return false;
-            }
-            if ($normalizedFilters['industry'] && strcasecmp($lead['industry'], $normalizedFilters['industry']) !== 0) {
-                return false;
-            }
-            if ($normalizedFilters['company_size'] && strcasecmp($lead['company_size'], $normalizedFilters['company_size']) !== 0) {
-                return false;
-            }
-            if ($normalizedFilters['city'] && stripos($lead['city'] . ' ' . $lead['state_province'], $normalizedFilters['city']) === false) {
-                return false;
-            }
-            return true;
-        });
-        if (empty($results)) {
-            $results = array_slice($sample, 0, 3);
-        }
-        return array_map(fn ($lead) => $this->normalizeLeadData($lead, $normalizedFilters), $results);
+        return $this->lastError;
     }
 
-    public function persistDiscoveredLeads(array $leads): array
+    public function discoverLeads(array $filters = []): array
     {
-        $created = 0;
-        $skipped = [];
-        foreach ($leads as $lead) {
-            $lead['lead_score'] = $this->scoreLead($lead);
-            if ($this->leadModel->existsByCompanyOrWebsite($lead['company_name'], $lead['website'])) {
-                $skipped[] = $lead['company_name'];
+        $this->lastError = null;
+        $apiKey = getenv('GOOGLE_PLACES_API_KEY') ?: '';
+        if ($apiKey === '') {
+            $this->lastError = 'Google Places API key missing. Add GOOGLE_PLACES_API_KEY to your environment.';
+            return [];
+        }
+
+        $query = $this->buildQueryFromFilters($filters);
+        if ($query === '') {
+            // No filters provided; skip remote discovery so the default list still loads quickly.
+            return [];
+        }
+
+        $params = [
+            'query' => $query,
+            'key' => $apiKey,
+        ];
+        if (!empty($filters['country']) && strlen($filters['country']) === 2) {
+            $params['region'] = strtolower($filters['country']);
+        }
+
+        $searchResponse = $this->fetchJson('https://maps.googleapis.com/maps/api/place/textsearch/json?' . http_build_query($params));
+        if ($searchResponse === null) {
+            $this->lastError = 'Unable to contact Google Places API.';
+            return [];
+        }
+
+        $status = $searchResponse['status'] ?? 'UNKNOWN_ERROR';
+        if ($status !== 'OK') {
+            if ($status === 'ZERO_RESULTS') {
+                return [];
+            }
+            $this->lastError = $searchResponse['error_message'] ?? ('Google Places error: ' . $status);
+            return [];
+        }
+
+        $leads = [];
+        $results = array_slice($searchResponse['results'] ?? [], 0, 8);
+        foreach ($results as $result) {
+            if (empty($result['place_id'])) {
                 continue;
             }
-            $this->leadModel->create($lead);
-            $created++;
+            $place = $this->fetchPlaceDetails($result['place_id'], $apiKey);
+            $address = $this->extractAddressComponents($place, $result['formatted_address'] ?? '');
+            $industry = $this->inferIndustry($filters, $result, $place);
+            $companySize = $filters['company_size'] ?? '';
+            $leadData = [
+                'id' => null,
+                'source' => 'google_places',
+                'company_name' => $result['name'] ?? 'Unknown Company',
+                'website' => $place['website'] ?? '',
+                'industry' => $industry,
+                'country' => $address['country'] ?? ($filters['country'] ?? ''),
+                'city' => $address['city'] ?? ($filters['city'] ?? ''),
+                'state_province' => $address['state'] ?? '',
+                'company_size' => $companySize !== '' ? $companySize : '1-10',
+                'contact_name' => '',
+                'contact_email' => $place['email'] ?? '',
+                'contact_phone' => $place['formatted_phone_number'] ?? ($place['international_phone_number'] ?? ''),
+                'status' => 'new',
+                'formatted_address' => $result['formatted_address'] ?? '',
+                'place_id' => $result['place_id'],
+                'rating' => $result['rating'] ?? null,
+                'user_ratings_total' => $result['user_ratings_total'] ?? null,
+            ];
+            $leadData['lead_score'] = $this->scoreLead([
+                'industry' => $leadData['industry'],
+                'website' => $leadData['website'],
+                'contact_email' => $leadData['contact_email'],
+            ]);
+            $leads[] = $leadData;
         }
-        return [
-            'created' => $created,
-            'skipped' => $skipped,
-        ];
+
+        return $leads;
     }
 
     private function scoreLead(array $data): int
@@ -105,101 +141,119 @@ class LeadFinderService
         return min(100, $score);
     }
 
-    private function normalizeLeadData(array $lead, array $filters = []): array
+    private function buildQueryFromFilters(array $filters): string
     {
-        $payload = [
-            'company_name' => $lead['company_name'] ?? 'Unknown Company',
-            'website' => $lead['website'] ?? '',
-            'industry' => $lead['industry'] ?? ($filters['industry'] ?? 'General'),
-            'description' => $lead['description'] ?? null,
-            'country' => $lead['country'] ?? ($filters['country'] ?? ''),
-            'state_province' => $lead['state_province'] ?? '',
-            'city' => $lead['city'] ?? ($filters['city'] ?? ''),
-            'company_size' => $lead['company_size'] ?? ($filters['company_size'] ?? ''),
-            'contact_name' => $lead['contact_name'] ?? 'Unknown Contact',
-            'contact_email' => $lead['contact_email'] ?? '',
-        ];
-        foreach ($payload as $key => $value) {
-            if (is_string($value)) {
-                $payload[$key] = trim($value);
+        $segments = [];
+        if (!empty($filters['industry'])) {
+            $segments[] = trim($filters['industry']) . ' companies';
+        }
+        $location = trim(($filters['city'] ?? '') . ' ' . ($filters['country'] ?? ''));
+        if ($location !== '') {
+            $segments[] = $location;
+        }
+        return trim(implode(' in ', array_filter($segments)));
+    }
+
+    private function fetchJson(string $url): ?array
+    {
+        $response = null;
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            if ($ch === false) {
+                return null;
+            }
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 10,
+            ]);
+            $response = curl_exec($ch);
+            if ($response === false) {
+                curl_close($ch);
+                return null;
+            }
+            $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($status >= 400) {
+                return null;
+            }
+        } else {
+            $context = stream_context_create([
+                'http' => [
+                    'method' => 'GET',
+                    'timeout' => 10,
+                ],
+            ]);
+            $response = @file_get_contents($url, false, $context);
+            if ($response === false) {
+                return null;
             }
         }
-        return $payload;
+
+        $decoded = json_decode($response, true);
+        return is_array($decoded) ? $decoded : null;
     }
 
-    private function normalizeFilters(array $filters): array
+    private function fetchPlaceDetails(string $placeId, string $apiKey): array
     {
-        return [
-            'country' => trim($filters['country'] ?? ''),
-            'industry' => trim($filters['industry'] ?? ''),
-            'company_size' => trim($filters['company_size'] ?? ''),
-            'city' => trim($filters['city'] ?? ''),
+        $params = [
+            'place_id' => $placeId,
+            'fields' => 'name,website,formatted_address,formatted_phone_number,international_phone_number,address_components,types',
+            'key' => $apiKey,
         ];
+        $details = $this->fetchJson('https://maps.googleapis.com/maps/api/place/details/json?' . http_build_query($params));
+        if (!is_array($details) || ($details['status'] ?? '') !== 'OK') {
+            return [];
+        }
+        return $details['result'] ?? [];
     }
 
-    private function seedDataset(): array
+    private function extractAddressComponents(array $place, string $fallback = ''): array
     {
-        return [
-            [
-                'company_name' => 'Blue Ridge Retail Co.',
-                'website' => 'https://blueridge-retail.example.com',
-                'industry' => 'Retail',
-                'description' => 'Regional outdoor retailer expanding omnichannel operations.',
-                'country' => 'USA',
-                'state_province' => 'CO',
-                'city' => 'Denver',
-                'company_size' => '51-200',
-                'contact_name' => 'Maya Lopez',
-                'contact_email' => 'maya.lopez@blueridge.example.com',
-            ],
-            [
-                'company_name' => 'Northwind Bistros',
-                'website' => 'https://northwind-bistros.example.com',
-                'industry' => 'Restaurant',
-                'description' => 'Modern casual dining group searching for loyalty platform.',
-                'country' => 'Canada',
-                'state_province' => 'BC',
-                'city' => 'Vancouver',
-                'company_size' => '11-50',
-                'contact_name' => 'Elliot Wells',
-                'contact_email' => 'elliot@northwindbistros.example.com',
-            ],
-            [
-                'company_name' => 'Evergreen Family Clinics',
-                'website' => 'https://evergreenfamily.example.com',
-                'industry' => 'Healthcare',
-                'description' => 'Multi-location care network digitizing patient intake.',
-                'country' => 'USA',
-                'state_province' => 'WA',
-                'city' => 'Seattle',
-                'company_size' => '200+',
-                'contact_name' => 'Dr. Priya Raman',
-                'contact_email' => 'priya.raman@evergreenfamily.example.com',
-            ],
-            [
-                'company_name' => 'Beacon Title Partners',
-                'website' => 'https://beacon-title.example.com',
-                'industry' => 'Real Estate',
-                'description' => 'Independent title firm looking for workflow automation.',
-                'country' => 'USA',
-                'state_province' => 'FL',
-                'city' => 'Tampa',
-                'company_size' => '51-200',
-                'contact_name' => 'Nina Patel',
-                'contact_email' => 'nina@beacontitle.example.com',
-            ],
-            [
-                'company_name' => 'Hudson Professional Services',
-                'website' => 'https://hudsonpro.example.com',
-                'industry' => 'Professional Services',
-                'description' => 'Accounting consultancy modernizing client portal experience.',
-                'country' => 'Canada',
-                'state_province' => 'ON',
-                'city' => 'Toronto',
-                'company_size' => '11-50',
-                'contact_name' => 'Leah Brooks',
-                'contact_email' => 'leah.brooks@hudsonpro.example.com',
-            ],
+        $parsed = [
+            'city' => '',
+            'state' => '',
+            'country' => '',
         ];
+        foreach ($place['address_components'] ?? [] as $component) {
+            $types = $component['types'] ?? [];
+            if (in_array('locality', $types, true) || in_array('postal_town', $types, true)) {
+                $parsed['city'] = $component['long_name'];
+            }
+            if (in_array('administrative_area_level_1', $types, true)) {
+                $parsed['state'] = $component['long_name'];
+            }
+            if (in_array('country', $types, true)) {
+                $parsed['country'] = $component['long_name'];
+            }
+        }
+        if ($fallback !== '') {
+            $parts = array_map('trim', explode(',', $fallback));
+            if ($parsed['country'] === '' && !empty($parts)) {
+                $parsed['country'] = array_pop($parts);
+            }
+            if ($parsed['state'] === '' && !empty($parts)) {
+                $parsed['state'] = array_pop($parts);
+            }
+            if ($parsed['city'] === '' && !empty($parts)) {
+                $parsed['city'] = array_pop($parts);
+            }
+        }
+        return $parsed;
+    }
+
+    private function inferIndustry(array $filters, array $result, array $place = []): string
+    {
+        if (!empty($filters['industry'])) {
+            return $filters['industry'];
+        }
+        $types = $place['types'] ?? $result['types'] ?? [];
+        $ignored = ['point_of_interest', 'establishment', 'store'];
+        foreach ($types as $type) {
+            if (in_array($type, $ignored, true)) {
+                continue;
+            }
+            return ucwords(str_replace('_', ' ', $type));
+        }
+        return 'General';
     }
 }

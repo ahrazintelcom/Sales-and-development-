@@ -1,3 +1,8 @@
+<?php
+$discoveryError = $discoveryError ?? null;
+$searchExecuted = $searchExecuted ?? false;
+$aiLeadCount = $aiLeadCount ?? 0;
+?>
 <div class="row g-4">
     <div class="col-12">
         <div class="card card-shadow">
@@ -22,7 +27,8 @@
                 <?php if (!empty($_SESSION['flash_error'])): ?>
                     <div class="alert alert-danger"><?= $_SESSION['flash_error']; unset($_SESSION['flash_error']); ?></div>
                 <?php endif; ?>
-                <form class="row g-3" method="post" action="<?= BASE_URL ?>/?route=leads/discover" data-discover-form>
+                <form class="row g-3" method="get">
+                    <input type="hidden" name="route" value="leads">
                     <div class="col-md-2">
                         <label class="form-label">Country</label>
                         <select class="form-select" name="country">
@@ -55,12 +61,18 @@
                         <input type="text" class="form-control" name="city" value="<?= htmlspecialchars($filters['city'] ?? '') ?>">
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100" data-discover-submit>
-                            <span class="default-label"><i class="bi bi-search"></i> Search Leads</span>
-                            <span class="loading-label d-none"><span class="spinner-border spinner-border-sm me-2"></span>Searching...</span>
-                        </button>
+                        <button class="btn btn-primary w-100"><i class="bi bi-search"></i> Search Leads</button>
                     </div>
                 </form>
+                <?php if ($searchExecuted): ?>
+                    <?php if (!empty($discoveryError)): ?>
+                        <div class="alert alert-warning mt-3"><i class="bi bi-exclamation-triangle"></i> <?= htmlspecialchars($discoveryError) ?></div>
+                    <?php elseif ($aiLeadCount > 0): ?>
+                        <div class="alert alert-success mt-3"><i class="bi bi-stars"></i> AI discovery surfaced <?= $aiLeadCount ?> new prospect<?= $aiLeadCount === 1 ? '' : 's' ?> via Google Places.</div>
+                    <?php else: ?>
+                        <div class="alert alert-info mt-3"><i class="bi bi-search"></i> No matching companies found via Google Places. Try broadening the location or industry.</div>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -83,14 +95,49 @@
                         </thead>
                         <tbody>
                         <?php foreach ($leads as $lead): ?>
+                            <?php $isAiLead = ($lead['source'] ?? '') === 'google_places'; ?>
                             <tr>
                                 <td>
                                     <strong><?= htmlspecialchars($lead['company_name']) ?></strong><br>
-                                    <a href="<?= htmlspecialchars($lead['website']) ?>" target="_blank"><?= htmlspecialchars($lead['website']) ?></a>
+                                    <?php if (!empty($lead['website'])): ?>
+                                        <a href="<?= htmlspecialchars($lead['website']) ?>" target="_blank"><?= htmlspecialchars($lead['website']) ?></a>
+                                    <?php else: ?>
+                                        <span class="text-muted">No website listed</span>
+                                    <?php endif; ?>
+                                    <?php if ($isAiLead): ?>
+                                        <div><span class="badge bg-info text-dark mt-2"><i class="bi bi-magic"></i> AI Prospect</span></div>
+                                    <?php endif; ?>
                                 </td>
                                 <td><?= htmlspecialchars($lead['industry']) ?></td>
-                                <td><?= htmlspecialchars($lead['city']) ?>, <?= htmlspecialchars($lead['state_province']) ?> (<?= htmlspecialchars($lead['country']) ?>)</td>
-                                <td><?= htmlspecialchars($lead['contact_name']) ?><br><a href="mailto:<?= htmlspecialchars($lead['contact_email']) ?>"><?= htmlspecialchars($lead['contact_email']) ?></a></td>
+                                <td>
+                                    <?php
+                                    $city = trim($lead['city'] ?? '');
+                                    $state = trim($lead['state_province'] ?? '');
+                                    $country = trim($lead['country'] ?? '');
+                                    $parts = array_filter([$city, $state], fn ($value) => $value !== '');
+                                    $location = implode(', ', $parts);
+                                    if ($country !== '') {
+                                        $location = $location !== '' ? $location . ' (' . $country . ')' : $country;
+                                    }
+                                    ?>
+                                    <?= $location !== '' ? htmlspecialchars($location) : '<span class="text-muted">—</span>' ?>
+                                    <?php if (!empty($lead['formatted_address'])): ?>
+                                        <div class="text-muted small"><?= htmlspecialchars($lead['formatted_address']) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if (!empty($lead['contact_name'])): ?>
+                                        <?= htmlspecialchars($lead['contact_name']) ?><br>
+                                    <?php endif; ?>
+                                    <?php if (!empty($lead['contact_email'])): ?>
+                                        <a href="mailto:<?= htmlspecialchars($lead['contact_email']) ?>"><?= htmlspecialchars($lead['contact_email']) ?></a><br>
+                                    <?php endif; ?>
+                                    <?php if (!empty($lead['contact_phone'])): ?>
+                                        <span class="text-muted"><?= htmlspecialchars($lead['contact_phone']) ?></span>
+                                    <?php elseif (empty($lead['contact_email'])): ?>
+                                        <span class="text-muted">No contact info</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><span class="badge bg-primary"><?= (int)$lead['lead_score'] ?></span></td>
                                 <td>
                                     <?php
@@ -101,31 +148,39 @@
                                         'locked_in' => 'success',
                                         'lost' => 'danger'
                                     ];
+                                    $statusKey = $lead['status'] ?? 'new';
                                     ?>
-                                    <span class="badge bg-<?= $colors[$lead['status']] ?? 'secondary' ?> status-badge"><?= str_replace('_',' ', $lead['status']) ?></span>
+                                    <span class="badge bg-<?= $colors[$statusKey] ?? 'secondary' ?> status-badge"><?= str_replace('_',' ', $statusKey) ?></span>
                                 </td>
                                 <td class="text-end">
-                                    <a href="<?= BASE_URL ?>/?route=leads/view&id=<?= $lead['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> View</a>
-                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
-                                        <input type="hidden" name="id" value="<?= $lead['id'] ?>">
-                                        <input type="hidden" name="status" value="contacted">
-                                        <button class="btn btn-sm btn-outline-secondary">Mark Contacted</button>
-                                    </form>
-                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
-                                        <input type="hidden" name="id" value="<?= $lead['id'] ?>">
-                                        <input type="hidden" name="status" value="follow_up">
-                                        <button class="btn btn-sm btn-warning text-white">Mark Follow-up</button>
-                                    </form>
-                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
-                                        <input type="hidden" name="id" value="<?= $lead['id'] ?>">
-                                        <input type="hidden" name="status" value="locked_in">
-                                        <button class="btn btn-sm btn-success">Mark Locked In</button>
-                                    </form>
-                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
-                                        <input type="hidden" name="id" value="<?= $lead['id'] ?>">
-                                        <input type="hidden" name="status" value="lost">
-                                        <button class="btn btn-sm btn-outline-danger">Mark Lost</button>
-                                    </form>
+                                    <?php if ($isAiLead): ?>
+                                        <?php if (!empty($lead['website'])): ?>
+                                            <a href="<?= htmlspecialchars($lead['website']) ?>" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-box-arrow-up-right"></i> Visit Site</a>
+                                        <?php endif; ?>
+                                        <div class="text-muted small mt-2">Generated from Google Places</div>
+                                    <?php elseif (!empty($lead['id'])): ?>
+                                        <a href="<?= BASE_URL ?>/?route=leads/view&id=<?= $lead['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> View</a>
+                                        <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
+                                            <input type="hidden" name="id" value="<?= $lead['id'] ?>">
+                                            <input type="hidden" name="status" value="contacted">
+                                            <button class="btn btn-sm btn-outline-secondary">Mark Contacted</button>
+                                        </form>
+                                        <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
+                                            <input type="hidden" name="id" value="<?= $lead['id'] ?>">
+                                            <input type="hidden" name="status" value="follow_up">
+                                            <button class="btn btn-sm btn-warning text-white">Mark Follow-up</button>
+                                        </form>
+                                        <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
+                                            <input type="hidden" name="id" value="<?= $lead['id'] ?>">
+                                            <input type="hidden" name="status" value="locked_in">
+                                            <button class="btn btn-sm btn-success">Mark Locked In</button>
+                                        </form>
+                                        <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
+                                            <input type="hidden" name="id" value="<?= $lead['id'] ?>">
+                                            <input type="hidden" name="status" value="lost">
+                                            <button class="btn btn-sm btn-outline-danger">Mark Lost</button>
+                                        </form>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
