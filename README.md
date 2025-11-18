@@ -40,7 +40,8 @@ Internal portal for sales + delivery teams to find leads, generate AI-powered sc
 
 ## AI + External Services
 - `src/Services/AIService.php` centralizes OpenAI usage. Replace placeholder responses once API key configured.
-- `LeadFinderService` + `GitHubService` include TODO comments for plugging in real APIs.
+- `LeadFinderService` now talks to Google Places. Set `GOOGLE_PLACES_API_KEY` in your `.env` so the Leads tab can run live discovery queries (industry + location) without needing CSV imports.
+- `GitHubService` still includes TODO comments for plugging in real APIs.
 
 ## Tech Stack
 - PHP 8+ with custom lightweight MVC

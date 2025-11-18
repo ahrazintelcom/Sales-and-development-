@@ -39,8 +39,13 @@ class LeadController extends Controller
             'company_size' => $_GET['company_size'] ?? '',
             'city' => $_GET['city'] ?? '',
         ];
-        $leads = $this->leadModel->all($filters);
-        $this->view('leads/index', compact('leads', 'filters'));
+        $searchExecuted = $this->shouldRunDiscovery($filters);
+        $discoveredLeads = $searchExecuted ? $this->leadFinderService->discoverLeads($filters) : [];
+        $storedLeads = $this->leadModel->all($filters);
+        $leads = array_merge($discoveredLeads, $storedLeads);
+        $discoveryError = $searchExecuted ? $this->leadFinderService->getLastError() : null;
+        $aiLeadCount = count($discoveredLeads);
+        $this->view('leads/index', compact('leads', 'filters', 'discoveryError', 'searchExecuted', 'aiLeadCount'));
     }
 
     public function importCsv(): void
@@ -188,5 +193,16 @@ class LeadController extends Controller
         http_response_code($status);
         header('Content-Type: application/json');
         echo json_encode($data);
+    }
+
+    private function shouldRunDiscovery(array $filters): bool
+    {
+        foreach (['industry', 'city', 'country'] as $key) {
+            $value = $filters[$key] ?? '';
+            if (is_string($value) && trim($value) !== '') {
+                return true;
+            }
+        }
+        return false;
     }
 }
