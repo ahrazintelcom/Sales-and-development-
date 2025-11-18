@@ -22,8 +22,7 @@
                 <?php if (!empty($_SESSION['flash_error'])): ?>
                     <div class="alert alert-danger"><?= $_SESSION['flash_error']; unset($_SESSION['flash_error']); ?></div>
                 <?php endif; ?>
-                <form class="row g-3" method="get">
-                    <input type="hidden" name="route" value="leads">
+                <form class="row g-3" method="post" action="<?= BASE_URL ?>/?route=leads/discover" data-discover-form>
                     <div class="col-md-2">
                         <label class="form-label">Country</label>
                         <select class="form-select" name="country">
@@ -56,7 +55,10 @@
                         <input type="text" class="form-control" name="city" value="<?= htmlspecialchars($filters['city'] ?? '') ?>">
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-primary w-100"><i class="bi bi-search"></i> Search Leads</button>
+                        <button type="submit" class="btn btn-primary w-100" data-discover-submit>
+                            <span class="default-label"><i class="bi bi-search"></i> Search Leads</span>
+                            <span class="loading-label d-none"><span class="spinner-border spinner-border-sm me-2"></span>Searching...</span>
+                        </button>
                     </div>
                 </form>
             </div>
