@@ -102,6 +102,9 @@ switch ($route) {
     case 'leads/status':
         (new LeadController())->markStatus();
         break;
+    case 'leads/generate-ai':
+        (new LeadController())->generateAi();
+        break;
     case 'leads/regenerate':
         (new LeadController())->regenerateScripts();
         break;

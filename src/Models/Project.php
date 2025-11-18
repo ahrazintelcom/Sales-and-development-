@@ -1,8 +1,20 @@
 <?php
-
-namespace App\Models;
-
-class Project extends Model
+    public function find(int $id): ?array
+    {
+        $stmt = $this->db->prepare('SELECT projects.*, leads.company_name, leads.industry, leads.website, leads.country, leads.city, leads.state_province, leads.company_size FROM projects JOIN leads ON leads.id = projects.lead_id WHERE projects.id = :id');
+        $stmt->execute(['id' => $id]);
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
+
+    public function findByLead(int $leadId): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM projects WHERE lead_id = :lead_id ORDER BY created_at DESC LIMIT 1');
+        $stmt->execute(['lead_id' => $leadId]);
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
+
 {
     public function create(array $data): int
     {
