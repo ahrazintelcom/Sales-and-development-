@@ -1,0 +1,16 @@
+body {
+    background-color: #f5f7fb;
+}
+.navbar-brand {
+    font-weight: 600;
+    letter-spacing: .5px;
+}
+.card-shadow {
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+.status-badge {
+    text-transform: capitalize;
+}
+.spinner-border.spinner-border-sm {
+    vertical-align: middle;
+}
