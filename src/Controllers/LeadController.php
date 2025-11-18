@@ -43,6 +43,39 @@ class LeadController extends Controller
         $this->view('leads/index', compact('leads', 'filters'));
     }
 
+    public function discover(): void
+    {
+        Auth::requireRole(['admin', 'sales']);
+        $filters = [
+            'country' => $_POST['country'] ?? $_GET['country'] ?? '',
+            'industry' => $_POST['industry'] ?? $_GET['industry'] ?? '',
+            'company_size' => $_POST['company_size'] ?? $_GET['company_size'] ?? '',
+            'city' => $_POST['city'] ?? $_GET['city'] ?? '',
+        ];
+        try {
+            $discovered = $this->leadFinderService->discoverLeads($filters);
+            if (empty($discovered)) {
+                $_SESSION['flash_error'] = 'No new leads matched those filters. Try broadening your search.';
+            } else {
+                $result = $this->leadFinderService->persistDiscoveredLeads($discovered);
+                if ($result['created'] > 0) {
+                    $message = sprintf('Imported %d leads from discovery.', $result['created']);
+                    if (!empty($result['skipped'])) {
+                        $message .= sprintf(' Skipped %d duplicate%s.', count($result['skipped']), count($result['skipped']) === 1 ? '' : 's');
+                    }
+                    $_SESSION['flash_success'] = $message;
+                } else {
+                    $_SESSION['flash_error'] = 'All discovered leads were already in your CRM.';
+                }
+            }
+        } catch (\Throwable $exception) {
+            $_SESSION['flash_error'] = 'Lead discovery failed. Please try again.';
+        }
+        $query = array_filter($filters, fn($value) => $value !== '' && $value !== null);
+        $queryString = http_build_query(array_merge(['route' => 'leads'], $query));
+        $this->redirect('/?' . $queryString);
+    }
+
     public function importCsv(): void
     {
         Auth::requireRole(['admin', 'sales']);
