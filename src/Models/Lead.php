@@ -60,6 +60,27 @@ class Lead extends Model
         return (int)$this->db->lastInsertId();
     }
 
+    public function existsByCompanyOrWebsite(?string $companyName, ?string $website): bool
+    {
+        $conditions = [];
+        $params = [];
+        if ($companyName) {
+            $conditions[] = 'LOWER(company_name) = LOWER(:company_name)';
+            $params['company_name'] = $companyName;
+        }
+        if ($website) {
+            $conditions[] = 'LOWER(website) = LOWER(:website)';
+            $params['website'] = $website;
+        }
+        if (empty($conditions)) {
+            return false;
+        }
+        $query = 'SELECT COUNT(*) FROM leads WHERE ' . implode(' OR ', $conditions);
+        $stmt = $this->db->prepare($query);
+        $stmt->execute($params);
+        return (bool)$stmt->fetchColumn();
+    }
+
     public function updateStatus(int $id, string $status): void
     {
         $stmt = $this->db->prepare('UPDATE leads SET status = :status, updated_at = NOW() WHERE id = :id');

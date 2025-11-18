@@ -12,6 +12,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-proposal]').forEach(btn => {
         btn.addEventListener('click', () => handleProposal(btn));
     });
+
+    document.querySelectorAll('[data-discover-form]').forEach(form => {
+        form.addEventListener('submit', () => {
+            const button = form.querySelector('[data-discover-submit]');
+            if (!button) return;
+            button.disabled = true;
+            const defaultLabel = button.querySelector('.default-label');
+            const loadingLabel = button.querySelector('.loading-label');
+            if (defaultLabel) defaultLabel.classList.add('d-none');
+            if (loadingLabel) loadingLabel.classList.remove('d-none');
+        });
+    });
 });
 
 function showToast(message, type = 'danger') {

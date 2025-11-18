@@ -93,6 +93,9 @@ switch ($route) {
     case 'leads/import':
         (new LeadController())->importCsv();
         break;
+    case 'leads/discover':
+        (new LeadController())->discover();
+        break;
     case 'leads/view':
         (new LeadController())->show();
         break;
