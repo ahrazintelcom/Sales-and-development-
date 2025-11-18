@@ -30,9 +30,46 @@ class Lead extends Model
         $stmt = $this->db->prepare($query);
         $stmt->execute($params);
         return $stmt->fetchAll();
-    }
-
-    public function find(int $id): ?array
+    public function updateLeadScore(int $id, int $score): void
+    {
+        $stmt = $this->db->prepare('UPDATE leads SET lead_score = :score WHERE id = :id');
+        $stmt->execute(['score' => $score, 'id' => $id]);
+    }
+
+    public function updateAiData(int $id, array $data): void
+    {
+        $stmt = $this->db->prepare('UPDATE leads SET 
+            ai_app_type = :ai_app_type,
+            ai_insight_summary = :ai_insight_summary,
+            ai_app_concept = :ai_app_concept,
+            ai_app_features = :ai_app_features,
+            ai_app_benefits = :ai_app_benefits,
+            ai_price_min = :ai_price_min,
+            ai_price_max = :ai_price_max,
+            ai_call_script = :ai_call_script,
+            ai_email_script = :ai_email_script,
+            ai_talking_points = :ai_talking_points,
+            ai_full_proposal = :ai_full_proposal,
+            ai_last_generated_at = :ai_last_generated_at,
+            updated_at = NOW()
+            WHERE id = :id');
+        $stmt->execute([
+            'ai_app_type' => $data['ai_app_type'] ?? null,
+            'ai_insight_summary' => $data['ai_insight_summary'] ?? null,
+            'ai_app_concept' => $data['ai_app_concept'] ?? null,
+            'ai_app_features' => $data['ai_app_features'] ?? null,
+            'ai_app_benefits' => $data['ai_app_benefits'] ?? null,
+            'ai_price_min' => $data['ai_price_min'] ?? null,
+            'ai_price_max' => $data['ai_price_max'] ?? null,
+            'ai_call_script' => $data['ai_call_script'] ?? null,
+            'ai_email_script' => $data['ai_email_script'] ?? null,
+            'ai_talking_points' => $data['ai_talking_points'] ?? null,
+            'ai_full_proposal' => $data['ai_full_proposal'] ?? null,
+            'ai_last_generated_at' => $data['ai_last_generated_at'] ?? null,
+            'id' => $id,
+        ]);
+    }
+
     {
         $stmt = $this->db->prepare('SELECT * FROM leads WHERE id = :id');
         $stmt->execute(['id' => $id]);
