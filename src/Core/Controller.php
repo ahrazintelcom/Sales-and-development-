@@ -20,9 +20,19 @@ class Controller
         include __DIR__ . '/../Views/' . $template . '.php';
     }
 
-    protected function redirect(string $route): void
+    protected function redirect(string $path): void
     {
-        header('Location: ' . $route);
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            header('Location: ' . $path);
+            exit;
+        }
+
+        $normalized = '/' . ltrim($path, '/');
+        if (defined('BASE_URL') && BASE_URL !== '') {
+            $normalized = BASE_URL . $normalized;
+        }
+
+        header('Location: ' . $normalized);
         exit;
     }
 }

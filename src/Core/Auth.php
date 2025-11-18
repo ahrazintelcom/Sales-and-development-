@@ -36,7 +36,8 @@ class Auth
     {
         $user = self::user();
         if (!$user || !in_array($user['role'], $roles, true)) {
-            header('Location: /?route=login');
+            $redirect = (BASE_URL ?: '') . '/?route=login';
+            header('Location: ' . $redirect);
             exit;
         }
     }

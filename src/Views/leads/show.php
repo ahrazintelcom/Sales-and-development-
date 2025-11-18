@@ -1,6 +1,6 @@
 <div class="row g-4">
     <div class="col-12">
-        <a href="/?route=leads" class="btn btn-link"><i class="bi bi-arrow-left"></i> Back to leads</a>
+        <a href="<?= BASE_URL ?>/?route=leads" class="btn btn-link"><i class="bi bi-arrow-left"></i> Back to leads</a>
     </div>
     <div class="col-lg-4">
         <div class="card card-shadow mb-4">

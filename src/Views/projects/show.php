@@ -1,6 +1,6 @@
 <div class="row g-4">
     <div class="col-12">
-        <a href="/?route=projects" class="btn btn-link"><i class="bi bi-arrow-left"></i> Back to pipeline</a>
+        <a href="<?= BASE_URL ?>/?route=projects" class="btn btn-link"><i class="bi bi-arrow-left"></i> Back to pipeline</a>
     </div>
     <div class="col-lg-4">
         <div class="card card-shadow mb-4">
@@ -16,11 +16,11 @@
         <div class="card card-shadow">
             <div class="card-body">
                 <h5 class="card-title">Actions</h5>
-                <form method="post" action="/?route=projects/spec" class="mb-2">
+                <form method="post" action="<?= BASE_URL ?>/?route=projects/spec" class="mb-2">
                     <input type="hidden" name="project_id" value="<?= $project['id'] ?>">
                     <button class="btn btn-outline-primary w-100"><i class="bi bi-stars"></i> Regenerate Spec</button>
                 </form>
-                <form method="post" action="/?route=projects/github">
+                <form method="post" action="<?= BASE_URL ?>/?route=projects/github">
                     <input type="hidden" name="project_id" value="<?= $project['id'] ?>">
                     <button class="btn btn-outline-dark w-100"><i class="bi bi-github"></i> Create GitHub Repo & Issues</button>
                 </form>
@@ -48,7 +48,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="card-title mb-0">Tasks</h5>
                 </div>
-                <form class="row g-2 mb-4" method="post" action="/?route=projects/task">
+                <form class="row g-2 mb-4" method="post" action="<?= BASE_URL ?>/?route=projects/task">
                     <input type="hidden" name="project_id" value="<?= $project['id'] ?>">
                     <div class="col-md-4">
                         <input type="text" class="form-control" name="title" placeholder="Task title" required>

@@ -16,7 +16,7 @@
                     <?php if (!empty($error)): ?>
                         <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
                     <?php endif; ?>
-                    <form method="post" action="/?route=login_post">
+                    <form method="post" action="<?= BASE_URL ?>/?route=login_post">
                         <div class="mb-3">
                             <label class="form-label">Email</label>
                             <input type="email" name="email" class="form-control" required>

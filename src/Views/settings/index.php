@@ -8,7 +8,7 @@
         <div class="card card-shadow">
             <div class="card-body">
                 <h5 class="card-title">OpenAI Configuration</h5>
-                <form method="post" action="/?route=settings/save">
+                <form method="post" action="<?= BASE_URL ?>/?route=settings/save">
                     <div class="mb-3">
                         <label class="form-label">API Key</label>
                         <input type="text" class="form-control" name="openai_api_key" value="<?= htmlspecialchars($settingsMap['openai_api_key'] ?? '') ?>">
@@ -26,7 +26,7 @@
         <div class="card card-shadow">
             <div class="card-body">
                 <h5 class="card-title">GitHub Integration</h5>
-                <form method="post" action="/?route=settings/save">
+                <form method="post" action="<?= BASE_URL ?>/?route=settings/save">
                     <div class="mb-3">
                         <label class="form-label">Personal Access Token</label>
                         <input type="text" class="form-control" name="github_token" value="<?= htmlspecialchars($settingsMap['github_token'] ?? '') ?>">
@@ -44,7 +44,7 @@
         <div class="card card-shadow">
             <div class="card-body">
                 <h5 class="card-title">Pricing Rules</h5>
-                <form class="row g-2" method="post" action="/?route=settings/pricing">
+                <form class="row g-2" method="post" action="<?= BASE_URL ?>/?route=settings/pricing">
                     <div class="col-6">
                         <input type="text" name="app_type" class="form-control" placeholder="App type key" required>
                     </div>
@@ -70,7 +70,7 @@
         <div class="card card-shadow">
             <div class="card-body">
                 <h5 class="card-title">Company Size Multipliers</h5>
-                <form class="row g-2" method="post" action="/?route=settings/multiplier">
+                <form class="row g-2" method="post" action="<?= BASE_URL ?>/?route=settings/multiplier">
                     <div class="col-6">
                         <input type="text" name="size_category" class="form-control" placeholder="11-50" required>
                     </div>

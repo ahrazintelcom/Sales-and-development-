@@ -8,7 +8,7 @@
                         <small class="text-muted">Filter and surface high intent prospects instantly.</small>
                     </div>
                     <div>
-                        <form class="d-inline" method="post" action="/?route=leads/import" enctype="multipart/form-data">
+                        <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/import" enctype="multipart/form-data">
                             <label class="btn btn-outline-secondary btn-sm mb-0">
                                 <i class="bi bi-upload"></i> Import Leads CSV
                                 <input type="file" name="csv" class="d-none" onchange="this.form.submit()" accept=".csv">
@@ -103,23 +103,23 @@
                                     <span class="badge bg-<?= $colors[$lead['status']] ?? 'secondary' ?> status-badge"><?= str_replace('_',' ', $lead['status']) ?></span>
                                 </td>
                                 <td class="text-end">
-                                    <a href="/?route=leads/view&id=<?= $lead['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> View</a>
-                                    <form class="d-inline" method="post" action="/?route=leads/status">
+                                    <a href="<?= BASE_URL ?>/?route=leads/view&id=<?= $lead['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> View</a>
+                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
                                         <input type="hidden" name="id" value="<?= $lead['id'] ?>">
                                         <input type="hidden" name="status" value="contacted">
                                         <button class="btn btn-sm btn-outline-secondary">Mark Contacted</button>
                                     </form>
-                                    <form class="d-inline" method="post" action="/?route=leads/status">
+                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
                                         <input type="hidden" name="id" value="<?= $lead['id'] ?>">
                                         <input type="hidden" name="status" value="follow_up">
                                         <button class="btn btn-sm btn-warning text-white">Mark Follow-up</button>
                                     </form>
-                                    <form class="d-inline" method="post" action="/?route=leads/status">
+                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
                                         <input type="hidden" name="id" value="<?= $lead['id'] ?>">
                                         <input type="hidden" name="status" value="locked_in">
                                         <button class="btn btn-sm btn-success">Mark Locked In</button>
                                     </form>
-                                    <form class="d-inline" method="post" action="/?route=leads/status">
+                                    <form class="d-inline" method="post" action="<?= BASE_URL ?>/?route=leads/status">
                                         <input type="hidden" name="id" value="<?= $lead['id'] ?>">
                                         <input type="hidden" name="status" value="lost">
                                         <button class="btn btn-sm btn-outline-danger">Mark Lost</button>

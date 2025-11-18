@@ -1,3 +1,9 @@
+const baseUrl = window.APP_BASE_URL || '';
+const withBase = (path) => {
+    const normalized = path.startsWith('/') ? path : '/' + path;
+    return (baseUrl || '') + normalized;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-regenerate]').forEach(btn => {
         btn.addEventListener('click', () => handleRegenerate(btn));
@@ -13,7 +19,7 @@ function handleRegenerate(button) {
     button.disabled = true;
     const spinner = button.querySelector('.spinner-border');
     if (spinner) spinner.classList.remove('d-none');
-    fetch('/?route=leads/regenerate', {
+    fetch(withBase('/?route=leads/regenerate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'id=' + leadId
@@ -92,7 +98,7 @@ function handleProposal(button) {
     modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary"></div><p class="mt-3">Generating proposal...</p></div>';
     const myModal = new bootstrap.Modal(document.getElementById('proposalModal'));
     myModal.show();
-    fetch('/?route=leads/proposal', {
+    fetch(withBase('/?route=leads/proposal'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'id=' + leadId

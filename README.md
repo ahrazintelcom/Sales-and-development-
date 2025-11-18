@@ -32,6 +32,7 @@ Internal portal for sales + delivery teams to find leads, generate AI-powered sc
    php -S localhost:8000 -t public
    ```
    Visit http://localhost:8000 and log in.
+   - Deployments in a subdirectory (e.g., `https://example.com/portal`) are supported—the app auto-detects the `/public` base path so redirects and assets stay within the correct folder. Ensure your web server routes requests through the `public/index.php` front controller.
 
 ## Configuring OpenAI & GitHub
 - OpenAI: store API key + model via Settings tab (persisted in DB) or `.env` for default fallback.

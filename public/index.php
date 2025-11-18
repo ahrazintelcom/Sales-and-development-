@@ -1,6 +1,13 @@
 <?php
 session_start();
 
+$scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+$baseUrl = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
+if ($baseUrl === '' || $baseUrl === '.') {
+    $baseUrl = '';
+}
+define('BASE_URL', $baseUrl);
+
 spl_autoload_register(function ($class) {
     $prefix = 'App\\';
     $baseDir = __DIR__ . '/../src/';
@@ -21,7 +28,18 @@ use App\Controllers\ProjectController;
 use App\Controllers\SettingsController;
 use App\Core\Auth;
 
-$route = $_GET['route'] ?? 'leads';
+$route = $_GET['route'] ?? null;
+if ($route === null) {
+    $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if ($requestPath !== null && BASE_URL !== '' && str_starts_with($requestPath, BASE_URL)) {
+        $requestPath = substr($requestPath, strlen(BASE_URL));
+    }
+    $requestPath = trim($requestPath ?? '', '/');
+    if ($requestPath !== '' && $requestPath !== 'index.php') {
+        $route = $requestPath;
+    }
+}
+$route = $route ?: 'leads';
 $method = $_SERVER['REQUEST_METHOD'];
 
 if (!Auth::check() && !in_array($route, ['login', 'login_post'])) {

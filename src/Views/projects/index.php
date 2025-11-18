@@ -35,7 +35,7 @@ $labels = [
                             <h6><?= htmlspecialchars($project['project_name']) ?></h6>
                             <p class="text-muted small mb-1">Client: <?= htmlspecialchars($project['company_name']) ?></p>
                             <p class="text-muted small">App Type: <?= htmlspecialchars($project['app_type']) ?></p>
-                            <a href="/?route=projects/view&id=<?= $project['id'] ?>" class="btn btn-sm btn-outline-primary w-100">View Project</a>
+                            <a href="<?= BASE_URL ?>/?route=projects/view&id=<?= $project['id'] ?>" class="btn btn-sm btn-outline-primary w-100">View Project</a>
                         </div>
                     <?php endforeach; ?>
                     <?php if (empty($items)): ?>
