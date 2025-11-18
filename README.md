@@ -6,6 +6,7 @@ Internal portal for sales + delivery teams to find leads, generate AI-powered sc
 - Bootstrap 5 UI with Leads, Dev Pipeline, and Settings tabs
 - CSV import + filters for lead discovery
 - AI-generated call/email scripts, proposals, and app recommendations via OpenAI Chat Completions
+- Lead detail cockpit with AI app concepts, pricing estimates, sales scripts, and ready-to-send proposals
 - Pricing engine with configurable base prices and size multipliers
 - Locked-in leads automatically create projects with AI spec drafts
 - Dev pipeline board with tasks and optional GitHub integration hooks

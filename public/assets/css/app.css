@@ -14,3 +14,10 @@ body {
 .spinner-border.spinner-border-sm {
     vertical-align: middle;
 }
+
+.proposal-content {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    white-space: pre-wrap;
+}
